@@ -157,7 +157,7 @@ void ctf_server(int sd, const char *user, int (*handler)(int))
          * We randomize the socket descriptor here to make shellcoders
          * unable to hardcode it. This makes for more interesting exploits.
          */
-#if defined(_DEBUG) || !defined(_NORAND)
+#if !defined(_DEBUG) && !defined(_NORAND)
         client = ctf_randfd(client);
 #endif
 
@@ -302,7 +302,7 @@ int ctf_randfd(int old)
 int ctf_recv(int sd, char *msg, unsigned int len)
 {
     int prev = 0;  // previous amount of bytes we received
-    unsigned int i;
+    unsigned int i = 0;
 
     if (msg && len) {
         // keep reading bytes until we've got the whole message
@@ -329,7 +329,7 @@ int ctf_recvuntil(int sd, char *msg, unsigned int len, const char stop)
 {
     char buf;  // temporary buffer to hold each received character
     int prev = 0;  // previous amount of bytes we received
-    unsigned int i;
+    unsigned int i = 0;
 
     if (msg && len) {
         // receive a char at a time until we hit sentinel or max length
@@ -364,7 +364,7 @@ int ctf_recvuntil(int sd, char *msg, unsigned int len, const char stop)
 int ctf_send(int sd, const char *msg, unsigned int len)
 {
     int prev = 0;  // previous amount of bytes we sent
-    unsigned int i;
+    unsigned int i = 0;
 
     // send entire message (in chunks if we have to)
     for (i = 0; i < len; i += prev) {
