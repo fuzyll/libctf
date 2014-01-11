@@ -15,49 +15,6 @@ not been tested.
 
 ## Usage ##
 
-Compiling libctf should be as easy as doing:
-
-```
-$(CC) -c ctf.c -o libctf.o
-```
-
-Linking libctf should be as easy as (assuming a service named "sample"):
-
-```
-$(CC) sample.o libctf.o -o sample
-```
-
-Typical usage of this library is to implement all service-specific
-functionality in a separate location and link against a custom-compiled
-libctf object on a per-service basis. This allows each service to specify
-custom options (listening on IPv4 vs. IPv6, for example). As such, no Makefile
-is provided.
-
-
-## Configuration ##
-
-This library supports some compile-time options in the form of DEFINEs.
-Supported DEFINEs are:
-
-```
--D_DEBUG
-    Removes dropping privileges so it may be run as any user.
-    Removes alarm so debugging isn't timed.
-    Adds a number of helpful debug messages for troubleshooting purposes.
-
--D_IPV6
-    Switches socket from IPV4 to IPV6.
-
--D_CHROOT
-    Additionally chroots into the service user's directory.
-
--D_NORAND
-    Skips randomizing the socket descriptor.
-```
-
-
-## API ##
-
 This library provides the following standard functions as its API:
 
 ```
@@ -85,6 +42,48 @@ int ctf_send(int sd, const char *msg, unsigned int len)
 int ctf_sendf(int sd, const char *msg, ...)
     Sends a formatted message and returns number of bytes sent.
 ```
+
+
+## Configuration ##
+
+This library supports some compile-time options in the form of DEFINEs.
+Supported DEFINEs are:
+
+```
+-D_DEBUG
+    Removes dropping privileges so it may be run as any user.
+    Removes alarm so debugging isn't timed.
+    Adds a number of helpful debug messages for troubleshooting purposes.
+
+-D_IPV6
+    Switches socket from IPV4 to IPV6.
+
+-D_CHROOT
+    Additionally chroots into the service user's directory.
+
+-D_NORAND
+    Skips randomizing the socket descriptor.
+```
+
+
+## Compilation ##
+
+Compiling libctf should be as easy as doing:
+
+```
+$(CC) -c ctf.c -o ctf.o
+```
+
+Linking libctf should be as easy as (assuming a service named "sample"):
+
+```
+$(CC) sample.c ctf.o -o sample
+```
+
+Typical usage of this library is to link against a custom-compiled
+libctf object on a per-service basis. This allows each service to specify
+custom options (listening on IPv4 vs. IPv6, for example). As such, no Makefile
+is provided (the above should be enough for you to put libctf into your own).
 
 
 ## Examples ##
@@ -158,6 +157,47 @@ service sample
 ```
 
 
+## Questions ##
+
+Answers to some common questions include:
+
+#### Question 1: How can I build libctf as a shared library? ####
+
+Building libctf as a shared library should look something like this:
+
+```
+$(CC) -c ctf.c -o ctf.o -fpic
+$(CC) ctf.o -shared -o libctf.so
+```
+
+Linking against it should look something like:
+
+```
+$(CC) sample.c -o sample -L /path/to/libctf.so -lctf
+```
+
+Keep in mind that you will need `/path/to/libctf.so` in your LD_LIBRARY_PATH.
+Otherwise, you will get an error like:
+
+```
+./sample: error while loading shared libraries: libctf.so: cannot open shared object file: No such file or directory
+```
+
+#### Question 2: What about support for languages like C#, Python, and Ruby? ####
+
+There's probably some merit in supporting bytecode-y languages. Truth be told,
+though, they might actually work fine already. I've just never tested them.
+
+* For C#, try compiling libctf as a shared object (see above) and use DllImport
+* For Python, try ctypes
+* For Ruby, try FFI
+
+This library is also not very novel (especially considering I didn't really
+write most of it - Kenshoto/DDTEK/LBS/GitS people did) and shouldn't be hard
+to re-implement if necessary. I've actually already done it for Ruby...but I
+haven't committed it anywhere yet.
+
+
 ## Roadmap ##
 
 The following is a list of features that have yet to be added and/or tested:
@@ -167,6 +207,6 @@ The following is a list of features that have yet to be added and/or tested:
 * Haven't compiled to any architectures other than x86/x86-64
 * Haven't fully tested SCTP and RAW codepaths
 * Haven't fully tested C++ and D bindings (can't get gdc to link properly)
-* Should probably create bindings to other languages (C#, Java, Ruby)
+* Test and/or create bindings to other languages (C#, Java, Python, Ruby, Lua)
 * Currently no support whatsoever for Windows services (in Wine or otherwise)
 * Haven't yet implemented DDTEK's backdoor stuff from DEFCON CTF Finals 19 and 20
