@@ -307,7 +307,7 @@ int ctf_recv(int sd, char *msg, unsigned int len)
     if (msg && len) {
         // keep reading bytes until we've got the whole message
         for (i = 0; i < len; i += prev) {
-            prev = recv(sd, msg + i, len - i, 0);
+            prev = read(sd, msg + i, len - i);
             if (prev <= 0) {
 #ifdef _DEBUG
                 warnx("Unable to receive entire message");
@@ -335,7 +335,7 @@ int ctf_recvuntil(int sd, char *msg, unsigned int len, const char stop)
         // receive a char at a time until we hit sentinel or max length
         for (i = 0; i < len; i += prev) {
             // receive character
-            prev = recv(sd, &buf, 1, 0);
+            prev = read(sd, &buf, 1);
             if (prev <= 0) {
 #ifdef _DEBUG
                 warnx("Unable to receive entire message");
@@ -358,17 +358,27 @@ int ctf_recvuntil(int sd, char *msg, unsigned int len, const char stop)
 
 
 /*
+ * Wrapper for ctf_sendn that does strlen() for you.
+ * Returns number of bytes send (or <= 0 for failure).
+ */
+int ctf_send(int sd, const char *msg)
+{
+    return ctf_sendn(sd, msg, strlen(msg));
+}
+
+
+/*
  * Sends a given message through a given socket.
  * Returns number of bytes sent (or <= 0 for failure).
  */
-int ctf_send(int sd, const char *msg, unsigned int len)
+int ctf_sendn(int sd, const char *msg, unsigned int len)
 {
     int prev = 0;  // previous amount of bytes we sent
     unsigned int i = 0;
 
     // send entire message (in chunks if we have to)
     for (i = 0; i < len; i += prev) {
-        prev = send(sd, msg + i, len - i, 0);
+        prev = write(sd, msg + i, len - i);
         if (prev <= 0) {
 #ifdef _DEBUG
             warnx("Unable to send entire message");
@@ -399,7 +409,7 @@ int ctf_sendf(int sd, const char *format, ...)
     }
 
     // send our message
-    status = ctf_send(sd, buf, strlen(buf));
+    status = ctf_sendn(sd, buf, strlen(buf));
 
 end:
     free(buf);
