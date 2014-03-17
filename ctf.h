@@ -49,6 +49,7 @@ extern "C" {
 #endif
 
 /* Networking Libraries */
+#include <ifaddrs.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
@@ -59,18 +60,18 @@ extern "C" {
 
 
 /* Service Setup Functions */
-int ctf_listen(unsigned short, int);
+int ctf_listen(const unsigned short, const int, const char *);
 void ctf_server(int, const char *, int (*handler)(int));
 void ctf_privdrop(const char *);
 int ctf_randfd(int);
 
 
 /* Socket Communication Wrappers */
-int ctf_recv(int, char *, unsigned int);
-int ctf_recvuntil(int, char *, unsigned int, const char);
-int ctf_send(int, const char *);
-int ctf_sendn(int, const char *, unsigned int);
-int ctf_sendf(int, const char *, ...);
+int ctf_readn(const int, char *, const unsigned int);
+int ctf_readsn(const int, char *, const unsigned int);
+int ctf_writes(const int, const char *);
+int ctf_writen(const int, const char *, const unsigned int);
+int ctf_writef(const int, const char *, ...);
 
 #endif
 

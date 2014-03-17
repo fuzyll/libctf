@@ -27,16 +27,17 @@ module ctf;
 extern (C) {
 
 /* Service Setup Functions */
-int ctf_listen(ushort, int);
-void ctf_loop(int, const char *, int function(int));
+int ctf_listen(const ushort, const int, const char *);
+void ctf_server(int, const char *, int function(int));
 void ctf_privdrop(const char *);
 int ctf_randfd(int);
 
 
 /* File and Socket Communication Wrappers */
-int ctf_recv(int, char *, uint);
-int ctf_recvuntil(int, char *, uint, const char);
-int ctf_send(int, const char *, uint);
-int ctf_sendf(int, const char *, ...);
+int ctf_readn(const int, char *, const uint);
+int ctf_readsn(const int, char *, const uint);
+int ctf_writes(const int, const char *);
+int ctf_writen(const int, const char *, const uint);
+int ctf_writef(const int, const char *, ...);
 
 }

@@ -26,14 +26,13 @@
 
 
 /*
- * Binds the service to a port and begins listening.
+ * Binds a socket to a port and begins listening.
+ * Defaults to listening on all interfaces if no interface is specified.
  * Returns the file descriptor of the socket that's been bound.
  * Exits completely on failure.
  */
-int ctf_listen(const unsigned short port, const int proto)
+int ctf_listen(const unsigned short port, const int proto, const char *iface)
 {
-    int sd;
-    int optval = 1;
 #ifndef _IPV6
     const int domain = AF_INET;
     struct sockaddr_in addr;
@@ -41,36 +40,13 @@ int ctf_listen(const unsigned short port, const int proto)
     const int domain = AF_INET6;
     struct sockaddr_in6 addr;
 #endif
-
-    /*
-     * Rather than set up the sockaddr_in struct here, DDTEK does getifaddrs()
-     * on an ifaddrs struct, finds an entry matching a given interface like
-     * "eth0" or "em1" and a given protocol version (AF_INET or AF_INET6), and
-     * passes that struct to bind instead.
-     *
-     * I have not done this, which means you cannot bind two services to the
-     * same port on different interfaces ("lo" and "eth0", for example). This
-     * is interesting functionality, but I currently don't have a use for it.
-     */
-
-    // populate socket structure
-#ifndef _IPV6
-    addr.sin_family = domain;
-    addr.sin_port = htons(port);
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
-#else
-    addr.sin6_family = domain;
-    addr.sin6_port = htons(port);
-    addr.sin6_addr = in6addr_any;
-#endif
+    struct ifaddrs *ifa;
+    int sd = -1;
+    int tmp;
 
     // ignore children so they disappear instead of becoming zombies
     if (signal(SIGCHLD, SIG_IGN) == SIG_ERR) {
-#ifdef _DEBUG
         errx(-1, "Unable to set SIGCHLD handler");
-#else
-        exit(-1);
-#endif
     }
 
     // create socket
@@ -80,46 +56,72 @@ int ctf_listen(const unsigned short port, const int proto)
         sd = socket(domain, SOCK_SEQPACKET, proto);
     } else if (proto == IPPROTO_UDP) {
         sd = socket(domain, SOCK_DGRAM, proto);
-    } else {
+    } else if (proto == IPPROTO_TCP) {
         sd = socket(domain, SOCK_STREAM, proto);
     }
-    if (sd == -1) {
-#ifdef _DEBUG
+    if (sd < 0) {
         errx(-1, "Unable to create socket");
-#else
-        exit(-1);
-#endif
     }
 
     // set socket reuse option
-    if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(int)) == -1) {
-#ifdef _DEBUG
+    tmp = 1;  // optval
+    if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &tmp, sizeof(int)) == -1) {
         errx(-1, "Unable to set socket reuse option");
-#else
-        exit(-1);
-#endif
     }
 
     // bind to socket
+    if (iface == NULL) {
+        /*
+         * If an interface hasn't been specified, we'll just bind on all
+         * available interfaces by default.
+         */
 #ifndef _IPV6
-    if (bind(sd, (const struct sockaddr *)&addr, sizeof(struct sockaddr_in)) == -1) {
+        addr.sin_family = domain;
+        addr.sin_port = htons(port);
+        addr.sin_addr.s_addr = htonl(INADDR_ANY);
+        if (bind(sd, (const struct sockaddr *)&addr, sizeof(struct sockaddr)) < 0) {
+            errx(-1, "Unable to bind socket");
+        }
 #else
-    if (bind(sd, (const struct sockaddr *)&addr, sizeof(struct sockaddr_in6)) == -1) {
+        addr.sin6_family = domain;
+        addr.sin6_port = htons(port);
+        addr.sin6_addr = in6addr_any;
+        if (bind(sd, (const struct sockaddr *)&addr, sizeof(struct sockaddr_in6)) < 0) {
+            errx(-1, "Unable to bind socket");
+        }
 #endif
-#ifdef _DEBUG
-        errx(-1, "Unable to bind socket");
+    } else {
+        /*
+         * If an interface has been specified, we'll loop through the available
+         * interfaces until we find it, and then try to bind on it. The
+         * temporary value here will be set to the return value of bind() so
+         * we know whether we were successful or not. It's negative by default
+         * to catch the edge-case of not finding the specified interface.
+         */
+        tmp = -1;  // return value of bind()
+        if (getifaddrs(&ifa) == 0) {
+            for (struct ifaddrs *i = ifa; i; i = i->ifa_next) {
+                if ((i->ifa_addr->sa_family == domain) && (strcmp(i->ifa_name, iface) == 0)) {
+                    *(unsigned short *)i->ifa_addr->sa_data = htons(port);
+#ifndef _IPV6
+                    tmp = bind(sd, i->ifa_addr, sizeof(struct sockaddr));
+                    break;
 #else
-        exit(-1);
+                    tmp = bind(sd, i->ifa_addr, sizeof(struct sockaddr_in6));
+                    break;
 #endif
+                }
+            }
+        }
+        freeifaddrs(ifa);
+        if (tmp != 0) {
+            errx(-1, "Unable to bind socket");
+        }
     }
 
     // listen for new connections
     if (proto != IPPROTO_UDP && proto != IPPROTO_RAW && listen(sd, 16) == -1) {
-#ifdef _DEBUG
         errx(-1, "Unable to listen on socket");
-#else
-        exit(-1);
-#endif
     }
 
     return sd;
@@ -128,7 +130,8 @@ int ctf_listen(const unsigned short port, const int proto)
 
 /*
  * Accepts connections and forks off child processes to handle them.
- * Loops indefinitely and should never return.
+ * Parent loops indefinitely and should never return.
+ * Children exit with the status of the handler function.
  */
 void ctf_server(int sd, const char *user, int (*handler)(int))
 {
@@ -195,7 +198,7 @@ void ctf_server(int sd, const char *user, int (*handler)(int))
 
 
 /*
- * Drops privileges from an administrative user to one specific to the service.
+ * Drops privileges to one specific to the service.
  * Exits completely on failure.
  */
 void ctf_privdrop(const char *user)
@@ -205,11 +208,7 @@ void ctf_privdrop(const char *user)
     // get passwd structure for the user
     pwentry = getpwnam(user);
     if (!pwentry) {
-#ifdef _DEBUG
         errx(-1, "Unable to find user");
-#else
-        exit(-1);
-#endif
     }
 
     /*
@@ -220,29 +219,17 @@ void ctf_privdrop(const char *user)
 
     // remove all extra groups (prevents escalation via group associations)
     if (setgroups(0, NULL) < 0) {
-#ifdef _DEBUG
         errx(-1, "Unable to remove extra groups");
-#else
-        exit(-1);
-#endif
     }
 
     // set real, effective, and saved GID to that of the unprivileged user
     if (setgid(pwentry->pw_gid) < 0) {
-#ifdef _DEBUG
         errx(-1, "Unable to change GID");
-#else
-        exit(-1);
-#endif
     }
 
     // set real, effective, and saved UID to that of the unprivileged user
     if (setuid(pwentry->pw_uid) < 0) {
-#ifdef _DEBUG
         errx(-1, "Unable to change UID");
-#else
-        exit(-1);
-#endif
     }
 
     // change directory (optionally chroot into the unprivileged user's home directory)
@@ -251,11 +238,7 @@ void ctf_privdrop(const char *user)
 #else
     if (chdir(pwentry->pw_dir) < 0) {
 #endif
-#ifdef _DEBUG
         errx(-1, "Unable to change current directory");
-#else
-        exit(-1);
-#endif
     }
 }
 
@@ -296,105 +279,105 @@ int ctf_randfd(int old)
 
 
 /*
- * Receives from a socket until given length is reached.
+ * Reads from a file descriptor until given length is reached.
  * Returns number of bytes received.
  */
-int ctf_recv(int sd, char *msg, unsigned int len)
+int ctf_readn(const int fd, char *msg, const unsigned int len)
 {
-    int prev = 0;  // previous amount of bytes we received
-    unsigned int i = 0;
+    int prev = 0;  // previous amount of bytes we read
+    unsigned int count = 0;
 
-    if (msg && len) {
+    if ((fd >= 0) && msg && len) {
         // keep reading bytes until we've got the whole message
-        for (i = 0; i < len; i += prev) {
-            prev = read(sd, msg + i, len - i);
+        for (count = 0; count < len; count += prev) {
+            prev = read(fd, msg + count, len - count);
             if (prev <= 0) {
 #ifdef _DEBUG
-                warnx("Unable to receive entire message");
+                warnx("Unable to read entire message");
 #endif
                 break;
             }
         }
     }
 
-    return i;
+    return count;
 }
 
 
 /*
- * Receives data from a socket until sentinel value or maximum length is reached.
- * Returns number of bytes received.
+ * Reads from a file descriptor until a newline or maximum length is reached.
+ * Returns number of bytes read, including the newline (which is now NULL).
  */
-int ctf_recvuntil(int sd, char *msg, unsigned int len, const char stop)
+int ctf_readsn(const int fd, char *msg, const unsigned int len)
 {
-    char buf;  // temporary buffer to hold each received character
-    int prev = 0;  // previous amount of bytes we received
-    unsigned int i = 0;
+    unsigned int count = 0;
+    char tmp;  // temporary storage for each character read
 
-    if (msg && len) {
-        // receive a char at a time until we hit sentinel or max length
-        for (i = 0; i < len; i += prev) {
-            // receive character
-            prev = read(sd, &buf, 1);
+    if ((fd >= 0) && msg && len) {
+        for (count = 0; count < len; count++) {
+            // read character
+            if (read(fd, &tmp, 1) <= 0) {
+#ifdef _DEBUG
+                warnx("Unable to read entire message");
+#endif
+                break;
+            }
+
+            // break loop if we received a newline
+            if (tmp == '\n') {
+                msg[count] = '\0';
+                break;
+            }
+
+            // add character to our message
+            msg[count] = tmp;
+        }
+    }
+
+    return count;
+}
+
+
+/*
+ * Wrapper for ctf_writen() that does strlen() for you.
+ * Returns number of bytes written (or <= 0 for failure).
+ */
+int ctf_writes(const int fd, const char *msg)
+{
+    return ctf_writen(fd, msg, strlen(msg));
+}
+
+
+/*
+ * Writes a given message of a given length to a given file descriptor.
+ * Returns number of bytes written (or <= 0 for failure).
+ */
+int ctf_writen(const int fd, const char *msg, const unsigned int len)
+{
+    int prev = 0;  // previous amount of bytes we wrote
+    unsigned int count = 0;
+
+    // write entire message (in chunks if we have to)
+    if ((fd >= 0) && msg && len) {
+        for (count = 0; count < len; count += prev) {
+            prev = write(fd, msg + count, len - count);
             if (prev <= 0) {
 #ifdef _DEBUG
-                warnx("Unable to receive entire message");
+                warnx("Unable to write entire message");
 #endif
-                break;
-            }
-
-            // add character to our received message
-            msg[i] = buf;
-
-            // break loop if it was our sentinel
-            if (buf == stop) {
-                break;
+                return prev;
             }
         }
     }
 
-    return i;
+    return count;
 }
 
 
 /*
- * Wrapper for ctf_sendn that does strlen() for you.
- * Returns number of bytes send (or <= 0 for failure).
+ * Wrapper for ctf_writen() to allow for formatted messages.
  */
-int ctf_send(int sd, const char *msg)
-{
-    return ctf_sendn(sd, msg, strlen(msg));
-}
-
-
-/*
- * Sends a given message through a given socket.
- * Returns number of bytes sent (or <= 0 for failure).
- */
-int ctf_sendn(int sd, const char *msg, unsigned int len)
-{
-    int prev = 0;  // previous amount of bytes we sent
-    unsigned int i = 0;
-
-    // send entire message (in chunks if we have to)
-    for (i = 0; i < len; i += prev) {
-        prev = write(sd, msg + i, len - i);
-        if (prev <= 0) {
-#ifdef _DEBUG
-            warnx("Unable to send entire message");
-#endif
-            return prev;
-        }
-    }
-
-    return i;
-}
-
-
-/*
- * Wrapper for ctf_send() to allow for formatted messages.
- */
-int ctf_sendf(int sd, const char *format, ...)
+int ctf_writef(const int fd, const char *format, ...)
 {
     va_list list;
     char *buf = NULL;  // temporary buffer to hold formatted string
@@ -408,8 +391,8 @@ int ctf_sendf(int sd, const char *format, ...)
         goto end;
     }
 
-    // send our message
-    status = ctf_sendn(sd, buf, strlen(buf));
+    // write our message
+    status = ctf_writen(fd, buf, strlen(buf));
 
 end:
     free(buf);
