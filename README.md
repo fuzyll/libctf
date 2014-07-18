@@ -65,6 +65,9 @@ Supported DEFINEs are:
 -D_IPV6
     Switches socket from IPV4 to IPV6 in ctf_listen().
 
+-D_SCTP
+    Adds support for SCTP sockets in the header file.
+
 -D_CHROOT
     Additionally chroots into the service user's directory in ctf_privdrop().
 

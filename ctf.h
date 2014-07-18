@@ -56,7 +56,9 @@ extern "C" {
 #include <netinet/ip6.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
+#ifdef _SCTP
 #include <netinet/sctp.h>
+#endif
 
 
 /* Service Setup Functions */
