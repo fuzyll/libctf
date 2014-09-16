@@ -65,6 +65,7 @@ extern "C" {
 int ctf_listen(const unsigned short, const int, const char *);
 void ctf_server(int, const char *, int (*handler)(int));
 void ctf_privdrop(const char *);
+void ctf_chroot(const char *);
 int ctf_randfd(int);
 
 

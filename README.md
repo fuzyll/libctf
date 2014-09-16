@@ -30,6 +30,11 @@ void ctf_server(int sd, const char *user, int (*handler)(int))
 void ctf_privdrop(const char *user)
     Drops privileges to chosen user.
 
+void ctf_chroot(const char *user)
+    Changes the root directory to the home directory of the specified user.
+    Intended for services using stdin/stdout for communication, rather than sockets.
+    Requires _CHROOT to be defined (see list of defines below).
+
 int ctf_randfd(int old)
     Randomizes a given file descriptor.
 
@@ -69,7 +74,8 @@ Supported DEFINEs are:
     Adds support for SCTP sockets in the header file.
 
 -D_CHROOT
-    Additionally chroots into the service user's directory in ctf_privdrop().
+    Exposes the ctf_chroot() API function.
+    Additionally modifies ctf_privdrop()'s behavior to chroot to the service user's directory.
 
 -D_RANDFD
     Enables randomizing the socket descriptor in ctf_server().
@@ -81,7 +87,7 @@ Supported DEFINEs are:
 Compiling libctf should be as easy as doing:
 
 ```
-$(CC) --std=c99 -D_GNU_SOURCE -c ctf.c -o ctf.o
+$(CC) --std=c11 -D_GNU_SOURCE -c ctf.c -o ctf.o
 ```
 
 Linking libctf should be as easy as (assuming a service named "sample"):
@@ -148,19 +154,21 @@ int main(int argc, char **argv)
 }
 ```
 
-With xinetd, however, you will need to add an entry in /etc/services and a
-configuration file in /etc/xinetd.d/ that looks like something like this:
+With xinetd, however, you will need to add a configuration file
+in /etc/xinetd.d/ that looks like something like this:
 
 ```
 service sample
 {
-    disable     = no
     id          = sample
+    user        = sample
+    server      = /home/sample/sample
+    disable     = no
+    port        = 65535
     socket_type = stream
     protocol    = tcp
     wait        = no
-    user        = sample
-    server      = /home/sample/sample
+    type        = UNLISTED
 }
 ```
 
@@ -174,7 +182,7 @@ Answers to some common questions include:
 Building libctf as a shared library should look something like this:
 
 ```
-$(CC) --std=c99 -D_GNU_SOURCE -fpic -c ctf.c -o ctf.o
+$(CC) --std=c11 -D_GNU_SOURCE -fpic -c ctf.c -o ctf.o
 $(CC) ctf.o -shared -o libctf.so
 ```
 
@@ -209,11 +217,10 @@ though, they might actually work fine already. I've just never tested them.
 
 The following is a list of features that have yet to be added and/or tested:
 
-* Building on OSX gives warnings on certain network-related things
 * Haven't actually built on FreeBSD yet
 * Haven't compiled to any architectures other than x86/x86-64
 * Haven't fully tested SCTP and RAW codepaths
-* Haven't fully tested C++ and D bindings (can't get gdc to link properly)
+* Haven't fully tested D bindings (can't get gdc to link properly)
 * Test and/or create bindings to other languages (C#, Java, Python, Ruby, Lua)
 * Currently no support whatsoever for Windows services (in Wine or otherwise)
 * Haven't yet implemented DDTEK's backdoor stuff from DEFCON CTF Finals 19 and 20

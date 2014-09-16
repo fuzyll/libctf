@@ -244,6 +244,28 @@ void ctf_privdrop(const char *user)
 
 
 /*
+ * Changes the root directory to the home directory of the specified user.
+ * Intended for services using stdin/stdout for communication, rather than sockets.
+ * Exits completely on failure.
+ */
+void ctf_chroot(const char *user)
+{
+    struct passwd *pwentry;
+
+    // get passwd structure for the user
+    pwentry = getpwnam(user);
+    if (!pwentry) {
+        errx(-1, "Unable to find user");
+    }
+
+    // change directory to user's home directory and chroot to it
+    if (chroot(pwentry->pw_dir) < 0 || chdir("/") < 0) {
+        errx(-1, "Unable to change current directory");
+    }
+}
+
+
+/*
  * Randomizes a given file descriptor.
  * Returns the newly randomized file descriptor.
  * Can never fail (falls back to rand() or the original file descriptor).
