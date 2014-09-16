@@ -30,11 +30,6 @@ void ctf_server(int sd, const char *user, int (*handler)(int))
 void ctf_privdrop(const char *user)
     Drops privileges to chosen user.
 
-void ctf_chroot(const char *user)
-    Changes the root directory to the home directory of the specified user.
-    Intended for services using stdin/stdout for communication, rather than sockets.
-    Requires _CHROOT to be defined (see list of defines below).
-
 int ctf_randfd(int old)
     Randomizes a given file descriptor.
 
@@ -74,8 +69,7 @@ Supported DEFINEs are:
     Adds support for SCTP sockets in the header file.
 
 -D_CHROOT
-    Exposes the ctf_chroot() API function.
-    Additionally modifies ctf_privdrop()'s behavior to chroot to the service user's directory.
+    Modifies ctf_privdrop()'s behavior to chroot to the service user's directory when changing to it.
 
 -D_RANDFD
     Enables randomizing the socket descriptor in ctf_server().
@@ -177,7 +171,22 @@ service sample
 
 Answers to some common questions include:
 
-#### Question 1: How can I build libctf as a shared library? ####
+#### Question 1: How can I get a service to chroot when running with xinetd? ####
+
+Originally, I added a separate function to handle this "special case". After
+working with it, I realized it could never work that way because of how xinetd
+drops privileges. The correct answer is to simply modify your xinetd config's
+`server` line to be the following two lines:
+
+```
+    server      = /usr/sbin/chroot
+    server_args = /home/sample /home/sample/sample
+```
+
+The first argument is the directory you'd like to chroot to. The second
+argument is the service you'd like to run.
+
+#### Question 2: How can I build libctf as a shared library? ####
 
 Building libctf as a shared library should look something like this:
 
@@ -203,14 +212,17 @@ As mentioned above, this is not a typical usage scenario because a number of
 useful features are provided as compile-time defines. You are, however, free
 to do as you wish.
 
-#### Question 2: What about support for languages like C#, Python, and Ruby? ####
+#### Question 3: Do you plan to support languages like C#, Python, and Ruby? ####
 
-There's probably some merit in supporting bytecode-y languages. Truth be told,
-though, they might actually work fine already. I've just never tested them.
+I currently have no plans to support extra languages. There's probably some
+merit in supporting bytecode-y languages. Truth be told, they might actually
+work fine already. I've just never tested them.
 
 * For C#, try compiling libctf as a shared object (see above) and use DllImport
 * For Python, try ctypes
 * For Ruby, try FFI
+
+Please let me know if you do actually try this out!
 
 
 ## Roadmap ##
