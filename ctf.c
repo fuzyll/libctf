@@ -18,7 +18,21 @@
 
 #include "ctf.h"
 
-
+#ifndef _IPV6
+static const int domain = AF_INET;
+typedef struct sockaddr_in sockaddr_inX;
+#define sinX_port   sin_port
+#define sinX_family sin_family
+#define sinX_addr   sin_addr.s_addr
+#define INXADDR_ANY INADDR_ANY
+#else
+static const int domain = AF_INET6;
+typedef struct sockaddr_in6 sockaddr_inX;
+#define sinX_port   sin6_port
+#define sinX_family sin6_family
+#define sinX_addr   sin6_addr
+#define INXADDR_ANY in6addr_any
+#endif
 /*
  * Binds a socket to a port and begins listening.
  * Defaults to listening on all interfaces if no interface is specified.
@@ -27,13 +41,7 @@
  */
 int ctf_listen(const unsigned short port, const int proto, const char *iface)
 {
-#ifndef _IPV6
-    const int domain = AF_INET;
-    struct sockaddr_in addr;
-#else
-    const int domain = AF_INET6;
-    struct sockaddr_in6 addr;
-#endif
+    sockaddr_inX addr, *paddr;
     struct ifaddrs *ifa;
     int sd = -1;
     int tmp;
@@ -69,21 +77,12 @@ int ctf_listen(const unsigned short port, const int proto, const char *iface)
          * If an interface hasn't been specified, we'll just bind on all
          * available interfaces by default.
          */
-#ifndef _IPV6
-        addr.sin_family = domain;
-        addr.sin_port = htons(port);
-        addr.sin_addr.s_addr = htonl(INADDR_ANY);
-        if (bind(sd, (const struct sockaddr *)&addr, sizeof(struct sockaddr)) < 0) {
+        addr.sinX_family = domain;
+        addr.sinX_port = htons(port);
+        addr.sinX_addr = INXADDR_ANY;
+        if (bind(sd, (const struct sockaddr *)&addr, sizeof(addr)) < 0) {
             errx(-1, "Unable to bind socket");
         }
-#else
-        addr.sin6_family = domain;
-        addr.sin6_port = htons(port);
-        addr.sin6_addr = in6addr_any;
-        if (bind(sd, (const struct sockaddr *)&addr, sizeof(struct sockaddr_in6)) < 0) {
-            errx(-1, "Unable to bind socket");
-        }
-#endif
     } else {
         /*
          * If an interface has been specified, we'll loop through the available
@@ -96,7 +95,8 @@ int ctf_listen(const unsigned short port, const int proto, const char *iface)
         if (getifaddrs(&ifa) == 0) {
             for (struct ifaddrs *i = ifa; i; i = i->ifa_next) {
                 if ((i->ifa_addr->sa_family == domain) && (strcmp(i->ifa_name, iface) == 0)) {
-                    *(unsigned short *)i->ifa_addr->sa_data = htons(port);
+                    paddr = (sockaddr_inX*) i->ifa_addr;
+                    paddr->sin_port = htons(port);
 #ifndef _IPV6
                     tmp = bind(sd, i->ifa_addr, sizeof(struct sockaddr));
                     break;
