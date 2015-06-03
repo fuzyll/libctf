@@ -66,10 +66,10 @@ int ctf_randfd(int);
 
 
 /* Socket Communication Wrappers */
-int ctf_readn(const int, char *, const unsigned int);
+int ctf_readn(const int, void *, const unsigned int);
 int ctf_readsn(const int, char *, const unsigned int);
 int ctf_writes(const int, const char *);
-int ctf_writen(const int, const char *, const unsigned int);
+int ctf_writen(const int, const void *, const unsigned int);
 
 __attribute__((format(printf, 2, 3)))
 int ctf_writef(const int, const char *, ...);

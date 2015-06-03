@@ -276,10 +276,11 @@ int ctf_randfd(int old)
  * Reads from a file descriptor until given length is reached.
  * Returns number of bytes received.
  */
-int ctf_readn(const int fd, char *msg, const unsigned int len)
+int ctf_readn(const int fd, void *msg_, const unsigned int len)
 {
     int prev = 0;  // previous amount of bytes we read
     unsigned int count = 0;
+    char * msg = (char *) msg_;
 
     if ((fd >= 0) && msg && len) {
         // keep reading bytes until we've got the whole message
@@ -346,10 +347,11 @@ int ctf_writes(const int fd, const char *msg)
  * Writes a given message of a given length to a given file descriptor.
  * Returns number of bytes written (or <= 0 for failure).
  */
-int ctf_writen(const int fd, const char *msg, const unsigned int len)
+int ctf_writen(const int fd, const void *msg_, const unsigned int len)
 {
     int prev = 0;  // previous amount of bytes we wrote
     unsigned int count = 0;
+    const char * msg = (const char*) msg_;
 
     // write entire message (in chunks if we have to)
     if ((fd >= 0) && msg && len) {
