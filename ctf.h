@@ -15,6 +15,7 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR
  * IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+#define _GNU_SOURCE
 
 #ifdef __cplusplus
 extern "C" {
@@ -57,16 +58,20 @@ extern "C" {
 
 /* Service Setup Functions */
 int ctf_listen(const unsigned short, const int, const char *);
+
+__attribute__((noreturn))
 void ctf_server(int, const char *, int (*handler)(int));
 void ctf_privdrop(const char *);
 int ctf_randfd(int);
 
 
 /* Socket Communication Wrappers */
-int ctf_readn(const int, char *, const unsigned int);
+int ctf_readn(const int, void *, const unsigned int);
 int ctf_readsn(const int, char *, const unsigned int);
 int ctf_writes(const int, const char *);
-int ctf_writen(const int, const char *, const unsigned int);
+int ctf_writen(const int, const void *, const unsigned int);
+
+__attribute__((format(printf, 2, 3)))
 int ctf_writef(const int, const char *, ...);
 
 #endif
