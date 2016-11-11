@@ -255,7 +255,9 @@ int ctf_randfd(int old)
         }
     } else {
         while (new <= old) {
-            read(fd, &new, 2);
+            if (read(fd, &new, 2) < 0) {
+                new = rand() % max;  // fall back to rand() if read failed
+            }
             new %= max;
         }
         close(fd);
