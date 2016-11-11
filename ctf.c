@@ -250,11 +250,11 @@ int ctf_randfd(int old)
 
     // randomize new file descriptor
     if (fd < 0) {
-        while (new < old) {
+        while (new <= old) {
             new = rand() % max;  // fall back to rand() if fd was invalid
         }
     } else {
-        while (new < old) {
+        while (new <= old) {
             read(fd, &new, 2);
             new %= max;
         }
